@@ -1,0 +1,6 @@
+Flowpack:
+  JobQueue:
+    Common:
+      queues:
+        'turboCharger':
+          className: 'Flowpack\JobQueue\Doctrine\Queue\DoctrineQueue'

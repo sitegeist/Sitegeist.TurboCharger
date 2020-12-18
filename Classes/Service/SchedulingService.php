@@ -63,12 +63,10 @@ class SchedulingService
         $actionRequest = ActionRequest::fromHttpRequest($httpRequest);
 
         $this->uriBuilder = new UriBuilder();
+        $this->uriBuilder->setRequest($actionRequest);
         $this->uriBuilder
             ->setFormat('html')
-            ->setCreateAbsoluteUri(true)
-            ->setRequest($actionRequest);
-
-        return $this->uriBuilder;
+            ->setCreateAbsoluteUri(true);
     }
 
     /**
@@ -77,8 +75,16 @@ class SchedulingService
      */
     public function scheduleForCachePreheating(NodeInterface $node, Workspace $targetWorkspace): void
     {
-        $nodeType = $node->getNodeType();
-        if ($targetWorkspace->isPublicWorkspace() === false || $nodeType->isOfType('Neos.Neos:Document') === false) {
+        if ($targetWorkspace->isPublicWorkspace() === false) {
+            return;
+        }
+
+        // traverse up to closest document
+        while (!$node->getNodeType()->isOfType('Neos.Neos:Document') && $node) {
+            $node = $node->getParent();
+        }
+
+        if (!$node || !$node->getNodeType()->isOfType('Neos.Neos:Document')) {
             return;
         }
 
@@ -90,14 +96,18 @@ class SchedulingService
         }
 
         $nodeContextPath = $liveNode->getContextPath();
-        if (array_key_exists($nodeContextPath, $this->pendingUrisToScheduleRequest) == false) {
-            $uri = $this->uriBuilder->uriFor(
-                'show',
-                ['node' => $liveNode],
-                'Frontend\\Node',
-                'Neos.Neos'
-            );
-            $this->pendingUrisToScheduleRequest[$nodeContextPath] = $uri;
+        if (!array_key_exists($nodeContextPath, $this->pendingUrisToScheduleRequest)) {
+            try {
+                $uri = $this->uriBuilder->uriFor(
+                    'show',
+                    ['node' => $liveNode],
+                    'Frontend\\Node',
+                    'Neos.Neos'
+                );
+                $this->pendingUrisToScheduleRequest[$nodeContextPath] = $uri;
+            } catch (\Exception $e) {
+                $this->logger->error(sprintf('could not schedule node "%s" for cache preheating because no url could be created', $nodeContextPath));
+            }
         }
     }
 
@@ -107,8 +117,8 @@ class SchedulingService
     public function scheduleCachePreheatingJobs(): void
     {
         if ($this->pendingUrisToScheduleRequest) {
-            foreach ($this->pendingUrisToScheduleRequest as $identifier => $uri) {
-                $this->logger->info(sprintf('schedule node "%s" uri "%s" for cache preheating', $identifier, $uri));
+            foreach ($this->pendingUrisToScheduleRequest as $nodeContextPath => $uri) {
+                $this->logger->info(sprintf('schedule node "%s" uri "%s" for cache preheating', $nodeContextPath, $uri));
                 $this->cacheWarmupService->simulateRequestToUri((string)$uri);
             }
             $this->pendingUrisToScheduleRequest = [];

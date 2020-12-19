@@ -4,3 +4,5 @@ Flowpack:
       queues:
         'turboCharger':
           className: 'Flowpack\JobQueue\Doctrine\Queue\DoctrineQueue'
+          options:
+            executeIsolated: true

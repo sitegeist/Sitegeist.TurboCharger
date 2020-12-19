@@ -5,7 +5,8 @@
     "license": "GPL-3.0-or-later",
     "require": {
         "neos/neos": "^5.3 || ^7.0 || dev-master",
-        "flowpack/jobqueue-common": "*"
+        "flowpack/jobqueue-common": "*",
+        "flowpack/jobqueue-doctrine": "*"
     },
     "autoload": {
         "psr-4": {

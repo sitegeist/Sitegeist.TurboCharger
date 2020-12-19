@@ -5,8 +5,8 @@ namespace Sitegeist\TurboCharger\Service;
 
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Core\Bootstrap;
+use Neos\Flow\Http\Middleware\MiddlewaresChainFactory;
 use Flowpack\JobQueue\Common\Annotations as Job;
-use Neos\Flow\Http\Middleware\MiddlewaresChain;
 use GuzzleHttp\Psr7\ServerRequest;
 use GuzzleHttp\Psr7\Uri;
 use Psr\Log\LoggerInterface;
@@ -27,16 +27,21 @@ class CacheWarmupService
 
     /**
      * @Flow\Inject
-     * @var MiddlewaresChain
+     * @var MiddlewaresChainFactory
      */
-    protected $middlewaresChain;
+    protected $middlewaresChainFactory;
+
+    /**
+     * @Flow\InjectConfiguration(package="Neos.Flow", path="http.middlewares")
+     * @var array
+     */
+    protected $middlewaresChainConfiguration;
 
     /**
      * @Flow\Inject
      * @var LoggerInterface
      */
     protected $logger;
-
 
     /**
      * @param string $uri
@@ -46,12 +51,14 @@ class CacheWarmupService
     {
         $originalRequestHandler = $this->bootstrap->getActiveRequestHandler();
         try {
-            $fakeRequest = new ServerRequest('get', new Uri($uri));
-            $fakeRequestHandler = new HttpRequestHandler($this->bootstrap);
-            $fakeRequestHandler->setHttpRequest($fakeRequest);
-            $this->bootstrap->setActiveRequestHandler($fakeRequestHandler);
-            $response = $this->middlewaresChain->handle($fakeRequest);
-            $this->logger->info(sprintf('Simulated request for uri "%s" yielded status %s', $uri, $response->getStatusCode()));
+            $simulatedRequest = new ServerRequest('get', new Uri($uri));
+            $requestHandler = new HttpRequestHandler($this->bootstrap);
+            $requestHandler->setHttpRequest($simulatedRequest);
+            $this->bootstrap->setActiveRequestHandler($requestHandler);
+            sleep(3);
+            $middlewaresChain = $this->middlewaresChainFactory->create($this->middlewaresChainConfiguration);
+            $simulatedResponse = $middlewaresChain->handle($simulatedRequest);
+            $this->logger->info(sprintf('Simulated request for uri "%s" yielded status %s', $uri, $simulatedResponse->getStatusCode()));
         } catch (\Exception $e) {
             $this->logger->info(sprintf('Simulated for uri "%s" yielded exception "%s"', $uri, $e->getMessage()));
         }

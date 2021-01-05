@@ -3,6 +3,7 @@ Flowpack:
     Common:
       queues:
         'turboCharger':
-          className: 'Flowpack\JobQueue\Doctrine\Queue\DoctrineQueue'
+          className: 'Flowpack\JobQueue\Common\Queue\FakeQueue'
           options:
+            async: true
             executeIsolated: true

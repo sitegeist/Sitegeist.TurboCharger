@@ -4,64 +4,46 @@ declare(strict_types=1);
 namespace Sitegeist\TurboCharger\Service;
 
 use GuzzleHttp\Psr7\ServerRequest;
-use GuzzleHttp\Psr7\Uri;
 use Neos\ContentRepository\Domain\Model\NodeInterface;
 use Neos\ContentRepository\Domain\Model\Workspace;
 use Neos\Flow\Annotations as Flow;
+use Neos\Flow\Core\Bootstrap;
+use Neos\Flow\Http\HttpRequestHandlerInterface;
 use Neos\Flow\Mvc\ActionRequest;
 use Neos\Flow\Mvc\Routing\UriBuilder;
+use Psr\Http\Message\UriInterface;
 use Psr\Log\LoggerInterface;
 use Neos\Neos\Controller\CreateContentContextTrait;
-use Neos\Flow\Persistence\PersistenceManagerInterface;
+use Sitegeist\TurboCharger\Http\HttpRequestHandler;
 
-/**
- * Class SchedulingService
- * @package Sitegeist\TurboCharger\Service
- * @Flow\Scope("singleton")
- */
+#[Flow\Scope('singleton')]
 class SchedulingService
 {
     use CreateContentContextTrait;
 
-    /**
-     * @Flow\Inject
-     * @var PersistenceManagerInterface
-     */
-    protected $persistenceManager;
+    #[Flow\Inject]
+    protected Bootstrap $bootstrap;
 
-    /**
-     * @Flow\Inject
-     * @var LoggerInterface
-     */
-    protected $logger;
+    #[Flow\Inject]
+    protected LoggerInterface $logger;
 
-    /**
-     * @Flow\Inject
-     * @var CacheWarmupService
-     */
-    protected $cacheWarmupService;
+    #[Flow\Inject]
+    protected CacheWarmupService $cacheWarmupService;
 
-    /**
-     * @Flow\InjectConfiguration(path="http.baseUri", package="Neos.Flow")
-     * @var string
-     */
-    protected $baseUri;
+    #[Flow\InjectConfiguration(path: 'http.baseUri', package: 'Neos.Flow')]
+    protected ?string $baseUri;
 
-    /**
-     * @var Uri[]
-     */
-    protected $pendingUrisToScheduleRequest = [];
+    /** @var array<string, UriInterface> */
+    protected array $pendingUrisToScheduleRequest = [];
 
-    /**
-     * @var UriBuilder
-     */
-    protected $uriBuilder;
+    protected UriBuilder $uriBuilder;
 
     public function initializeObject() {
-        $baseUri = $this->baseUri ?? 'http://localhost';
-        $httpRequest = new ServerRequest('GET', $baseUri);
-        $actionRequest = ActionRequest::fromHttpRequest($httpRequest);
-
+        $requestHandler = $this->bootstrap->getActiveRequestHandler();
+        if (!$requestHandler instanceof HttpRequestHandlerInterface) {
+            return;
+        }
+        $actionRequest = ActionRequest::fromHttpRequest($requestHandler->getHttpRequest());
         $this->uriBuilder = new UriBuilder();
         $this->uriBuilder->setRequest($actionRequest);
         $this->uriBuilder
@@ -69,12 +51,13 @@ class SchedulingService
             ->setCreateAbsoluteUri(true);
     }
 
-    /**
-     * @param NodeInterface $node The node was published
-     * @param Workspace $targetWorkspace
-     */
-    public function scheduleForCachePreheating(NodeInterface $node, Workspace $targetWorkspace): void
+    public function afterNodePublishing(NodeInterface $node, Workspace $targetWorkspace): void
     {
+        $requestHandler = $this->bootstrap->getActiveRequestHandler();
+        if (!$requestHandler instanceof HttpRequestHandlerInterface) {
+            return;
+        }
+
         if ($targetWorkspace->isPublicWorkspace() === false) {
             return;
         }
@@ -91,7 +74,7 @@ class SchedulingService
         $liveContext = $this->createContentContext('live', $node->getContext()->getDimensions());
         $liveNode = $liveContext->getNodeByIdentifier((string)$node->getNodeAggregateIdentifier());
 
-        if (!$liveNode) {
+        if (!$liveNode || !$liveNode->isVisible() || !$liveNode->isAccessible()) {
             return;
         }
 
@@ -105,24 +88,26 @@ class SchedulingService
                     'Neos.Neos'
                 );
                 $this->pendingUrisToScheduleRequest[$nodeContextPath] = $uri;
+                $this->logger->info(sprintf ("schedule url %s for %s", (string)$uri, $nodeContextPath));
             } catch (\Exception $e) {
                 $this->logger->error(sprintf('could not schedule node "%s" for cache preheating because no url could be created', $nodeContextPath));
             }
         }
     }
 
-    /**
-     * @return void
-     */
-    public function scheduleCachePreheatingJobs(): void
+    public function allObjectsPersisted(): void
     {
+        $requestHandler = $this->bootstrap->getActiveRequestHandler();
+        if (!$requestHandler instanceof HttpRequestHandlerInterface) {
+            return;
+        }
+
         if ($this->pendingUrisToScheduleRequest) {
             foreach ($this->pendingUrisToScheduleRequest as $nodeContextPath => $uri) {
-                $this->logger->info(sprintf('schedule node "%s" uri "%s" for cache preheating', $nodeContextPath, $uri));
+                $this->logger->debug(sprintf('schedule node "%s" uri "%s" for cache preheating', $nodeContextPath, $uri));
                 $this->cacheWarmupService->simulateRequestToUri((string)$uri);
             }
             $this->pendingUrisToScheduleRequest = [];
-            $this->persistenceManager->persistAll();
         }
     }
 }

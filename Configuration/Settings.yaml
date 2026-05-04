@@ -2,8 +2,11 @@ Flowpack:
   JobQueue:
     Common:
       queues:
-        'turboCharger':
+        'sitegeist-turbocharger':
           className: 'Flowpack\JobQueue\Common\Queue\FakeQueue'
           options:
             async: true
             executeIsolated: true
+Sitegeist:
+  TurboCharger:
+    internalBaseUrl: 'http://localhost'

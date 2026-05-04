@@ -4,7 +4,7 @@
     "name": "sitegeist/turbocharger",
     "license": "GPL-3.0-or-later",
     "require": {
-        "neos/neos": "^5.3 || ^7.0 || dev-master",
+        "neos/neos": "^8.0",
         "flowpack/jobqueue-common": "*"
     },
     "autoload": {

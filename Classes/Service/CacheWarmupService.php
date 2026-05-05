@@ -13,6 +13,9 @@ use Sitegeist\TurboCharger\Http\HttpRequestHandler;
 #[Flow\Scope('singleton')]
 class CacheWarmupService
 {
+    #[Flow\InjectConfiguration(path: 'enabled')]
+    protected bool $enabled;
+
     #[Flow\InjectConfiguration(path: 'internalBaseUrl')]
     protected ?string $internalBaseUrl;
 
@@ -22,6 +25,9 @@ class CacheWarmupService
     #[Job\Defer(queueName: 'sitegeist-turbocharger')]
     public function simulateRequestToUri(string $uri)
     {
+        if ($this->enabled === false) {
+            return;
+        }
         $parsedUrl = parse_url($uri);
         if ($this->internalBaseUrl !== null) {
             $internalUrl = $this->internalBaseUrl . $parsedUrl[ 'path' ] . (isset($parsedUrl[ 'query' ]) ? '?' . $parsedUrl[ 'query' ] : '');
@@ -37,9 +43,9 @@ class CacheWarmupService
         curl_exec($curlHandle);
         $responseCode = curl_getinfo( $curlHandle,CURLINFO_RESPONSE_CODE);
         if ($responseCode === 200) {
-            $this->logger->debug(sprintf('Warmup of %s via %s, headers %s succeeded ', $uri, $internalUrl, json_encode($headers, JSON_THROW_ON_ERROR)));
+            $this->logger->info(sprintf('Cache warmup of %s via %s, headers %s succeeded ', $uri, $internalUrl, json_encode($headers, JSON_THROW_ON_ERROR)));
         } else {
-            $this->logger->error(sprintf('Request of %s via %s, headers %s failed', $uri, $internalUrl, json_encode($headers, JSON_THROW_ON_ERROR)));
+            $this->logger->error(sprintf('Cache warmup of %s via %s, headers %s failed!', $uri, $internalUrl, json_encode($headers, JSON_THROW_ON_ERROR)));
         }
     }
 }

@@ -25,13 +25,13 @@ class SchedulingService
     protected Bootstrap $bootstrap;
 
     #[Flow\Inject]
-    protected LoggerInterface $logger;
-
-    #[Flow\Inject]
     protected CacheWarmupService $cacheWarmupService;
 
     #[Flow\InjectConfiguration(path: 'http.baseUri', package: 'Neos.Flow')]
     protected ?string $baseUri;
+
+    #[Flow\InjectConfiguration(path: 'enabled')]
+    protected bool $enabled;
 
     /** @var array<string, UriInterface> */
     protected array $pendingUrisToScheduleRequest = [];
@@ -41,6 +41,7 @@ class SchedulingService
     public function initializeObject() {
         $requestHandler = $this->bootstrap->getActiveRequestHandler();
         if (!$requestHandler instanceof HttpRequestHandlerInterface) {
+            $this->enabled = false;
             return;
         }
         $actionRequest = ActionRequest::fromHttpRequest($requestHandler->getHttpRequest());
@@ -53,8 +54,7 @@ class SchedulingService
 
     public function afterNodePublishing(NodeInterface $node, Workspace $targetWorkspace): void
     {
-        $requestHandler = $this->bootstrap->getActiveRequestHandler();
-        if (!$requestHandler instanceof HttpRequestHandlerInterface) {
+        if ($this->enabled === false) {
             return;
         }
 
@@ -88,23 +88,19 @@ class SchedulingService
                     'Neos.Neos'
                 );
                 $this->pendingUrisToScheduleRequest[$nodeContextPath] = $uri;
-                $this->logger->info(sprintf ("schedule url %s for %s", (string)$uri, $nodeContextPath));
             } catch (\Exception $e) {
-                $this->logger->error(sprintf('could not schedule node "%s" for cache preheating because no url could be created', $nodeContextPath));
             }
         }
     }
 
     public function allObjectsPersisted(): void
     {
-        $requestHandler = $this->bootstrap->getActiveRequestHandler();
-        if (!$requestHandler instanceof HttpRequestHandlerInterface) {
+        if ($this->enabled === false) {
             return;
         }
 
         if ($this->pendingUrisToScheduleRequest) {
             foreach ($this->pendingUrisToScheduleRequest as $nodeContextPath => $uri) {
-                $this->logger->debug(sprintf('schedule node "%s" uri "%s" for cache preheating', $nodeContextPath, $uri));
                 $this->cacheWarmupService->simulateRequestToUri((string)$uri);
             }
             $this->pendingUrisToScheduleRequest = [];

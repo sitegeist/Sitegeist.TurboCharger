@@ -1,9 +1,9 @@
-Flowpack:
-  JobQueue:
-    Common:
-      queues:
-        'turboCharger':
-          className: 'Flowpack\JobQueue\Common\Queue\FakeQueue'
-          options:
-            async: true
-            executeIsolated: true
+Sitegeist:
+  TurboCharger:
+    # enable the feature entirely
+    enabled: true
+
+    # Configure the url for fetching: the headers `Host` and `X-Forward-Proto`
+    # are used to simulate an external request.
+    # Use this to configure any special ports you may need like `http://localhost:8080`
+    internalBaseUrl: 'http://localhost'
